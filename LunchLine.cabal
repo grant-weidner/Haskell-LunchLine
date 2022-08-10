@@ -28,6 +28,7 @@ library
       AppT
       Env
       Lib
+      Parser
   other-modules:
       Paths_LunchLine
   hs-source-dirs:

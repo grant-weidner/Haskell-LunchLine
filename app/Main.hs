@@ -14,6 +14,8 @@ module Main where
 
 import AppT
 import Env
+import Parser
+import Control.Applicative
 import Control.Monad.Reader
 import Control.Monad.Logger
 import Control.Monad (forever)
@@ -50,49 +52,62 @@ getLineItemTotal = selectSum $ do
  where
   selectSum = fmap (maybe 0 (fromMaybe 0 . unValue)) . selectOne
 
-getLineItemNames :: MonadIO m => SqlPersistT m [Entity LineItem]
--- getLineItemNames :: (Num a, MonadIO m, PersistField a) => SqlPersistT m a
-getLineItemNames = select $ from $ table @LineItem
-  -- liftIO $ mapM_ (putStrLn . lineItemName . entityVal) items
+getLineItems :: MonadIO m => SqlPersistT m [Entity LineItem]
+getLineItems = select $ from $ table @LineItem
 
--- getLineItemNames:: (Num a, MonadIO m, PersistField a) => SqlPersistT m a
--- getLineItemNames = do
---   items <- selectList [lineItemName]
+getLineItemNames :: AppT [String]
+getLineItemNames = do
+  items <- runDB $ do getLineItems
+  pure $ fmap (lineItemName . entityVal) items
 
-runApp :: AppT ()
-runApp = do
-  total <- runDB $ do -- do inside a do block ? same monad ?
-    insert_ $ LineItem "Pizza" 11
-    insert_ $ LineItem "Burger" 12
-    getLineItemTotal
-  names <- runDB $ do getLineItemNames
-  liftIO . putStrLn $ intercalate " " $ fmap (lineItemName . entityVal) names
-  let remainingBudget = weeklyBudget - total
-  liftIO .  putStrLn $ "Remaining Budget: " <> show remainingBudget
+getLineItemsInShowFormat :: AppT [(String, Int)]
+getLineItemsInShowFormat = do 
+  items <- runDB $ getLineItems
+  pure $ fmap formatLineItem items where
+    formatLineItem s = (lineItemNameEV s, lineItemAmountEV s) where
+      lineItemNameEV = lineItemName . entityVal
+      lineItemAmountEV = lineItemAmount . entityVal
 
+showLineItems :: AppT ()
+showLineItems = do
+  itemsToShow <- getLineItemsInShowFormat
+  liftIO . putStrLn $ intercalate "\n"  (fmap show itemsToShow)
 
-processUserInput :: String -> IO ()
+processUserInput :: String -> AppT ()
 processUserInput input = case parseUserInput input of
   "c" -> liftIO .  putStrLn $ "you said command c"
   "p" -> liftIO .  putStrLn $ "you said command p"
   otherwise -> liftIO .  putStrLn $ "invalid command"
   where parseUserInput input = splitOn " " input !! 0
 
--- commandC :: [String] -> IO()
-
-
-interact :: IO ()
+interact :: AppT ()
 interact = do
-  putStrLn $ "Hello,\nwaiting for input:" 
-  forever $ do
+  liftIO . putStrLn $ "Hello,\nwaiting for input:" 
+  liftIO . forever $ do
     input <- getLine
-    processUserInput input
+    let result = parse (parseC <|> parseP) input -- does this take you out of monadic context
+    case result of
+      Right ('c', Just name, Just amount) -> putStrLn "success! command c"
+      Right ('p', Nothing, Nothing) -> putStrLn "success! command p"
+      Left _ -> putStrLn "whoops, error"
+      otherwise -> putStrLn "case not caught"
     putStr $ "waiting for input: "
     hFlush stdout
 
+runApp :: AppT ()
+runApp = do
+  total <- runDB $ do
+    insert_ $ LineItem "Pizza" 11
+    insert_ $ LineItem "Burger" 12
+    getLineItemTotal
+  names <- runDB $ do getLineItems
+  liftIO . putStrLn $ intercalate " " $ fmap (lineItemName . entityVal) names
+  let remainingBudget = weeklyBudget - total
+  liftIO .  putStrLn $ "Remaining Budget: " <> show remainingBudget
+  Main.interact
+  
 main :: IO ()
 main = do
   env <- runStderrLoggingT $ Env <$> createSqlitePool ":memory:" 10
   runAppT (runDB (runMigration migrateAll)) env
   runAppT runApp env
-  Main.interact
