@@ -1,0 +1,44 @@
+
+module Parser where
+
+import qualified Text.Parsec as Parsec
+
+-- type TNumber = Int
+ 
+-- data TOperator = TAdd
+--                | TSubtract
+--                  deriving (Eq, Ord, Show)
+ 
+-- data TExpression = TNode (TExpression) TOperator (TExpression)
+--                  | TTerminal TNumber
+--                    deriving (Show)
+
+-- data TExpression = SpendCommand (TOperator)
+--                  | PrintCommand
+--                  | RemainingComand
+
+-- This looks for letters, then spaces, then digits.
+-- we then return letters and digits in a tuple.
+
+parseC :: Parsec.Parsec String () (Char, Maybe String, Maybe Int)
+parseC = do
+    command <- Parsec.char 'c'
+    Parsec.spaces
+    letters <- Parsec.many1 Parsec.letter
+    Parsec.spaces
+    digits <- read <$> Parsec.many1 Parsec.digit
+    return (command, Just letters, Just digits)
+
+
+myParser :: Parsec.Parsec String () (String,String)
+myParser = do
+    letters <- Parsec.many1 Parsec.letter
+    Parsec.spaces
+    digits <- Parsec.many1 Parsec.digit
+    return (letters,digits)
+    
+-- test rule text = Parsec.parse parseC "c lsllsdl 12212" text
+
+parse rule text = Parsec.parse (Parsec.char 'H') "sadshhl" text
+
+-- parseCommands = par
