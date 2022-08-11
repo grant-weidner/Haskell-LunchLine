@@ -29,6 +29,7 @@ dependencies:
 - esqueleto
 - split
 - parsec
+- time
 
 default-extensions:
 - OverloadedStrings

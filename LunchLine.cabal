@@ -47,6 +47,7 @@ library
     , persistent-sqlite
     , resource-pool
     , split
+    , time
   default-language: Haskell2010
 
 executable LunchLine-exe
@@ -71,6 +72,7 @@ executable LunchLine-exe
     , persistent-sqlite
     , resource-pool
     , split
+    , time
   default-language: Haskell2010
 
 test-suite LunchLine-test
@@ -96,4 +98,5 @@ test-suite LunchLine-test
     , persistent-sqlite
     , resource-pool
     , split
+    , time
   default-language: Haskell2010

@@ -80,35 +80,31 @@ addItem name amount = do
   runDB $ do 
     time <- liftIO getCurrentTime
     insert_ $ LineItem name amount time
-  liftIO $ putStrLn $ "added " <> name <> ": " <> show amount <> " to the DB"
+    liftIO $ putStrLn $ "added " <> name <> ": " <> show amount <> " to the DB"
 
-getTotalSpent :: AppT ()
-getTotalSpent = do
-  total <- runDB $ getLineItemTotal @Int
-  liftIO $ putStrLn $ "total spent so far is: " <> show total 
-
--- processUserInput :: String -> AppT ()
--- processUserInput input = case parseUserInput input of
---   "c" -> liftIO .  putStrLn $ "you said command c" 
---   "p" -> liftIO .  putStrLn $ "you said command p"
---   otherwise -> liftIO .  putStrLn $ "invalid command"
---   where parseUserInput input = splitOn " " input !! 0
+processUserInput :: String -> AppT ()
+processUserInput input = case parseUserInput input of
+  "c" -> liftIO .  putStrLn $ "you said command c" 
+  "p" -> liftIO .  putStrLn $ "you said command p"
+  otherwise -> liftIO .  putStrLn $ "invalid command"
+  where parseUserInput input = splitOn " " input !! 0
 
 interact :: AppT ()
 interact = do
+  -- ask about this
+  env <- pure $ unAppT $ runReaderT $ ask  
   liftIO . putStrLn $ "Hello,\nwaiting for input:" 
-  forever $ do
-    input <- liftIO $ getLine
-    let result = parse (parseC <|> parseP <|> parseT) input -- does this take you out of monadic context
+  liftIO . forever $ do
+    input <- getLine
+    let result = parse (parseC <|> parseP) input -- does this take you out of monadic context
     case result of
       -- Right ('c', Just name, Just amount) -> putStrLn "success! command c"
-      Right ('c', Just name, Just amount) -> addItem name amount
-      Right ('p', Nothing, Nothing) -> showLineItems
-      Right ('t', Nothing, Nothing) -> getTotalSpent
-      Left _ -> liftIO $ putStrLn "whoops, error"
-      _ -> liftIO $ putStrLn "case not caught"
-    liftIO $ putStr $ "waiting for input: "
-    liftIO $ hFlush stdout
+      Right ('c', Just name, Just amount) -> runAppT (addItem name amount) env
+      Right ('p', Nothing, Nothing) -> putStrLn "success! command p"
+      Left _ -> putStrLn "whoops, error"
+      otherwise -> putStrLn "case not caught"
+    putStr $ "waiting for input: "
+    hFlush stdout
 
 runApp :: AppT ()
 runApp = do
@@ -123,6 +119,6 @@ runApp = do
   
 main :: IO ()
 main = do
-  env <- runNoLoggingT $ Env <$> createSqlitePool ":memory:" 10
+  env <- runStderrLoggingT $ Env <$> createSqlitePool ":memory:" 10
   runAppT (runDB (runMigration migrateAll)) env
   runAppT runApp env

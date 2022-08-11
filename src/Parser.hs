@@ -18,7 +18,13 @@ parseC = do
 
 parseP :: Parsec.Parsec String () (Char, Maybe String, Maybe Int)
 parseP = do
-    command <- Parsec.oneOf ['p']
+    command <- Parsec.char 'p'
+    Parsec.spaces
+    return (command, Nothing, Nothing)
+
+parseT :: Parsec.Parsec String () (Char, Maybe String, Maybe Int)
+parseT = do
+    command <- Parsec.char 't'
     Parsec.spaces
     return (command, Nothing, Nothing)
     
