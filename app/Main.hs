@@ -19,11 +19,11 @@ import Control.Applicative
 import Control.Monad.Reader
 import Control.Monad.Logger
 import Control.Monad (forever)
-import Database.Persist.Sqlite
+import Database.Persist.Sqlite hiding ((=.),(<.),(>.), update)
 import Database.Persist.TH
 import Data.List (foldl', intercalate)
 import Data.List.Split (splitOn)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, Maybe(..))
 import Database.Esqueleto.Experimental
 import System.IO
 import Data.Time
@@ -33,6 +33,9 @@ LineItem
   name String
   amount Int
   created UTCTime default=CURRENT_TIME
+  deriving Show
+Budget
+  amount Int
   deriving Show
 |]
 
@@ -54,6 +57,40 @@ getLineItemTotal = selectSum $ do
  where
   selectSum = fmap (maybe 0 (fromMaybe 0 . unValue)) . selectOne
 
+-- getLineItemTotalLastDay :: (Num a, MonadIO m, PersistField a) => SqlPersistT m a
+-- getLineItemTotalLastDay = select $ do
+--   lineItems <- from $ table @LineItem
+--     where_ $
+--       lineItems ^. LineItemCreated <. val time24HoursAgo
+--   pure $ sum_ $ lineItems ^. LineItemAmount
+--  where
+--   time24HoursAgo = liftIO $ fmap (addUTCTime (-nominalDay)) getCurrentTime
+--   selectSum = fmap (maybe 0 (fromMaybe 0 . unValue)) . selectOne
+
+getLineItemTotalSince:: MonadIO m => UTCTime -> SqlPersistT m [Entity LineItem]
+getLineItemTotalSince t = 
+  select $ do
+    items <- from $ table @LineItem
+    where_ $ items ^. LineItemCreated >. val t 
+    -- liftIO $ putStrLn $ show items
+    pure items
+
+testGetLineItemTotalSince:: MonadIO m => SqlPersistT m [Entity LineItem]
+testGetLineItemTotalSince = do
+  time24HoursAgo <- liftIO $ fmap (addUTCTime (-nominalDay)) getCurrentTime
+  getLineItemTotalSince time24HoursAgo 
+
+showLastDayStats :: AppT ()
+showLastDayStats = do 
+  time24HoursAgo <- liftIO $ fmap (addUTCTime (-nominalDay)) getCurrentTime
+  lastDayItems <- runDB $ getLineItemTotalSince time24HoursAgo 
+  numberLastDayItems <- pure $ length lastDayItems
+  totalSpentLastDay <- pure $ sum $ fmap (lineItemAmount . entityVal) lastDayItems
+  liftIO $ putStrLn $ "Last Day Stats:"
+  liftIO $ putStrLn $ "  total spent in the last day: " <> show totalSpentLastDay
+  liftIO $ putStrLn $ "  number of items bought in the last day: " <> show numberLastDayItems
+  liftIO $ putStrLn $ "  average cost of item in the last day: " <> show (totalSpentLastDay `div` numberLastDayItems)
+  
 getLineItems :: MonadIO m => SqlPersistT m [Entity LineItem]
 getLineItems = select $ from $ table @LineItem
 
@@ -82,6 +119,29 @@ addItem name amount = do
     insert_ $ LineItem name amount time
   liftIO $ putStrLn $ "added " <> name <> ": " <> show amount <> " to the DB"
 
+updateBudget :: Int -> AppT ()
+updateBudget a = do 
+  runDB $ update $ \b -> do
+    set b [BudgetAmount =. val a]
+  liftIO $ putStrLn $ "updated budget to: " <> show a
+  
+getBudget :: AppT Int
+getBudget = do 
+  budget <- runDB $ select $ from $ table @Budget 
+  pure $  (head (fmap (budgetAmount . entityVal) budget) )
+
+showBudget :: AppT ()
+showBudget = do
+  budget <- getBudget
+  liftIO $ putStrLn $ "budget is: " ++ show budget
+
+showRemainingBudget :: AppT ()
+showRemainingBudget = do
+  totalSpent <- runDB $ getLineItemTotal
+  budget <- getBudget
+  let remaining = budget - totalSpent
+  liftIO $ putStrLn $ "remaining budget is: " <> (show remaining)
+
 getTotalSpent :: AppT ()
 getTotalSpent = do
   total <- runDB $ getLineItemTotal @Int
@@ -99,21 +159,26 @@ interact = do
   liftIO . putStrLn $ "Hello,\nwaiting for input:" 
   forever $ do
     input <- liftIO $ getLine
-    let result = parse (parseC <|> parseP <|> parseT) input -- does this take you out of monadic context
+    let result = parse (parseC <|> parseP <|> parseT <|> parseU <|> parseS <|> parseR <|> parseD) input -- does this take you out of monadic context
     case result of
       -- Right ('c', Just name, Just amount) -> putStrLn "success! command c"
       Right ('c', Just name, Just amount) -> addItem name amount
       Right ('p', Nothing, Nothing) -> showLineItems
       Right ('t', Nothing, Nothing) -> getTotalSpent
+      Right ('u', Nothing, Just amount) -> updateBudget amount
+      Right ('s', Nothing, Nothing) -> showBudget
+      Right ('r', Nothing, Nothing) -> showRemainingBudget
+      Right ('d', Nothing, Nothing) -> showLastDayStats
       Left _ -> liftIO $ putStrLn "whoops, error"
       _ -> liftIO $ putStrLn "case not caught"
-    liftIO $ putStr $ "waiting for input: "
+    liftIO $ putStrLn $ "waiting for input: "
     liftIO $ hFlush stdout
 
 runApp :: AppT ()
 runApp = do
   addItem "Pizza" 11
   addItem "Burger" 12
+  runDB $ insert_ $ Budget 100
   total <- runDB $ getLineItemTotal
   names <- runDB $ getLineItems
   liftIO . putStrLn $ intercalate " " $ fmap (lineItemName . entityVal) names

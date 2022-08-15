@@ -16,17 +16,25 @@ parseC = do
     digits <- read <$> Parsec.many1 Parsec.digit
     return (command, Just letters, Just digits)
 
-parseP :: Parsec.Parsec String () (Char, Maybe String, Maybe Int)
-parseP = do
-    command <- Parsec.char 'p'
+parseP = parseSingleCharComand 'p'
+parseT = parseSingleCharComand 't'
+parseS = parseSingleCharComand 's'
+parseD = parseSingleCharComand 'd'
+parseR = parseSingleCharComand 'r'
+
+parseSingleCharComand :: Char -> Parsec.Parsec String () (Char, Maybe String, Maybe Int)
+parseSingleCharComand c = do
+    command <- Parsec.char c
     Parsec.spaces
     return (command, Nothing, Nothing)
 
-parseT :: Parsec.Parsec String () (Char, Maybe String, Maybe Int)
-parseT = do
-    command <- Parsec.char 't'
+parseU :: Parsec.Parsec String () (Char, Maybe String, Maybe Int)
+parseU = do
+    command <- Parsec.char 'u'
     Parsec.spaces
-    return (command, Nothing, Nothing)
+    digits <- read <$> Parsec.many1 Parsec.digit
+    return (command, Just digits)
+    return (command, Nothing, Just digits)
     
 parse rule text = Parsec.parse rule "(source)" text
 
