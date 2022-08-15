@@ -73,10 +73,11 @@ showLastDayStats = do
   lastDayItems <- runDB $ getLineItemTotalSince time24HoursAgo 
   numberLastDayItems <- pure $ length lastDayItems
   totalSpentLastDay <- pure $ sum $ fmap (lineItemAmount . entityVal) lastDayItems
-  liftIO $ putStrLn $ "Last Day Stats:"
-  liftIO $ putStrLn $ "  total spent in the last day: " <> show totalSpentLastDay
-  liftIO $ putStrLn $ "  number of items bought in the last day: " <> show numberLastDayItems
-  liftIO $ putStrLn $ "  average cost of item in the last day: " <> show (totalSpentLastDay `div` numberLastDayItems)
+  liftIO $ do 
+    putStrLn $ "Last Day Stats:"
+    putStrLn $ "  total spent in the last day: " <> show totalSpentLastDay
+    putStrLn $ "  number of items bought in the last day: " <> show numberLastDayItems
+    putStrLn $ "  average cost of item in the last day: " <> show (totalSpentLastDay `div` numberLastDayItems)
   
 getLineItems :: MonadIO m => SqlPersistT m [Entity LineItem]
 getLineItems = select $ from $ table @LineItem
@@ -86,20 +87,17 @@ getLineItemNames = do
   items <- getLineItems
   pure $ fmap (lineItemName . entityVal) items
 
-getLineItemsInShowFormat :: MonadIO m => SqlPersistT m [(String, Int)] -- changed to SqlPersistT
-getLineItemsInShowFormat = do 
-  items <- getLineItems
-  pure $ fmap (formatLineItem . entityVal) items 
+getLineItemsInShowFormat :: [LineItem] -> [(String, Int)]
+getLineItemsInShowFormat items = 
+  fmap (formatLineItem) items 
   where
     formatLineItem s = (lineItemName s, lineItemAmount s) 
 
--- move rundb into interact
--- rewrite appt functions in sqlpersistT
-
 showLineItems :: AppT ()
 showLineItems = do
-  itemsToShow <- runDB getLineItemsInShowFormat
-  liftIO . putStrLn $ intercalate "\n"  (fmap show itemsToShow)
+  items <- runDB getLineItems
+  itemsShowFormat <- pure $ getLineItemsInShowFormat (fmap entityVal items)
+  liftIO . putStrLn $ intercalate "\n" (fmap show itemsShowFormat)
 
 addItem' :: MonadIO m => String -> Int -> UTCTime -> SqlPersistT m () -- changed to SqlPersistT
 addItem' name amount time =  
@@ -151,13 +149,14 @@ interact = do
     input <- liftIO $ getLine
     let result = parse parser input
     case result of
-      Right (CommandC name amount) -> addItem name amount
-      Right CommandP -> showLineItems
-      Right CommandT -> showTotalSpent
-      Right (CommandU amount) -> updateBudget amount
-      Right CommandS -> showBudget
-      Right CommandR -> showRemainingBudget
-      Right CommandD -> showLastDayStats
+      Right command ->  case command of 
+        CommandC name amount -> addItem name amount
+        CommandP -> showLineItems
+        CommandT -> showTotalSpent
+        CommandU amount -> updateBudget amount
+        CommandS -> showBudget
+        CommandR -> showRemainingBudget
+        CommandD -> showLastDayStats
       Left _ -> liftIO $ putStrLn "whoops, error"
     liftIO $ putStrLn $ "waiting for input: "
     liftIO $ hFlush stdout
