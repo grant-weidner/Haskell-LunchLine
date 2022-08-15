@@ -24,12 +24,6 @@ parseC = do
     digits <- read <$> Parsec.many1 Parsec.digit
     return $ CommandC letters digits
 
-parseP = parseSingleCharComand 'p'
-parseT = parseSingleCharComand 't'
-parseS = parseSingleCharComand 's'
-parseD = parseSingleCharComand 'd'
-parseR = parseSingleCharComand 'r'
-
 parseSingleCharComand :: Char -> Parsec.Parsec String () Command
 parseSingleCharComand c = do
     command <- Parsec.char c
@@ -51,10 +45,17 @@ parseU = do
     
 parse rule text = Parsec.parse rule "(source)" text
 
-parser = (parseC <|> parseP <|> parseT <|> parseU <|> parseS <|> parseR <|> parseD)
+parser = (  parseC 
+        <|> parseSingleCharComand 'p'
+        <|> parseSingleCharComand 't' 
+        <|> parseU 
+        <|> parseSingleCharComand 's'
+        <|> parseSingleCharComand 'r' 
+        <|> parseSingleCharComand 'd'
+         )
 
 error_example = do
-    let result = parse (parseC <|> parseP) "p 21313 " 
+    let result = parse (parseC <|> parseSingleCharComand 'p') "p 21313 " 
     case result of
         Right _ -> putStrLn "success!"
         Left _ -> putStrLn "whoops, error"
