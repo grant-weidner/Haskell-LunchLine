@@ -47,9 +47,6 @@ runDB body = do
 weeklyBudget :: Int
 weeklyBudget = 100
 
-spend :: Int -> LineItem -> Int
-spend n LineItem{..} = n - (lineItemAmount)
-
 getLineItemTotal :: (Num a, MonadIO m, PersistField a) => SqlPersistT m a
 getLineItemTotal = selectSum $ do
   items <- from $ table @LineItem
@@ -84,59 +81,66 @@ showLastDayStats = do
 getLineItems :: MonadIO m => SqlPersistT m [Entity LineItem]
 getLineItems = select $ from $ table @LineItem
 
-getLineItemNames :: AppT [String]
+getLineItemNames :: MonadIO m => SqlPersistT m [String] -- changed to SqlPersistT
 getLineItemNames = do
-  items <- runDB getLineItems
+  items <- getLineItems
   pure $ fmap (lineItemName . entityVal) items
 
-getLineItemsInShowFormat :: AppT [(String, Int)]
+getLineItemsInShowFormat :: MonadIO m => SqlPersistT m [(String, Int)] -- changed to SqlPersistT
 getLineItemsInShowFormat = do 
-  items <- runDB getLineItems
+  items <- getLineItems
   pure $ fmap (formatLineItem . entityVal) items 
   where
     formatLineItem s = (lineItemName s, lineItemAmount s) 
 
--- add adt for command and parse into that
 -- move rundb into interact
 -- rewrite appt functions in sqlpersistT
 
 showLineItems :: AppT ()
 showLineItems = do
-  itemsToShow <- getLineItemsInShowFormat
+  itemsToShow <- runDB getLineItemsInShowFormat
   liftIO . putStrLn $ intercalate "\n"  (fmap show itemsToShow)
+
+addItem' :: MonadIO m => String -> Int -> UTCTime -> SqlPersistT m () -- changed to SqlPersistT
+addItem' name amount time =  
+  insert_ $ LineItem name amount time
 
 addItem :: String -> Int -> AppT ()
 addItem name amount = do 
-  runDB $ do 
-    time <- liftIO getCurrentTime
-    insert_ $ LineItem name amount time
+  time <- liftIO getCurrentTime
+  runDB $ addItem' name amount time
+  -- runDB $ insert_ $ LineItem name amount time
   liftIO $ putStrLn $ "added " <> name <> ": " <> show amount <> " to the DB"
+
+updateBudget' :: MonadIO m => Int -> SqlPersistT m () -- changed to SqlPersistT
+updateBudget' a = update $ \b -> do
+    set b [BudgetAmount =. val a]
 
 updateBudget :: Int -> AppT ()
 updateBudget a = do 
-  runDB $ update $ \b -> do
-    set b [BudgetAmount =. val a]
+  runDB $ updateBudget' a 
   liftIO $ putStrLn $ "updated budget to: " <> show a
   
-getBudget :: AppT Int
+getBudget :: MonadIO m => SqlPersistT m Int -- changed to SqlPersistT
 getBudget = do 
-  budget <- runDB $ select $ from $ table @Budget 
+  budget <- select $ from $ table @Budget 
   pure $  (head (fmap (budgetAmount . entityVal) budget) )
 
 showBudget :: AppT ()
 showBudget = do
-  budget <- getBudget
+  budget <- runDB getBudget
   liftIO $ putStrLn $ "budget is: " ++ show budget
 
 showRemainingBudget :: AppT ()
 showRemainingBudget = do
-  totalSpent <- runDB $ getLineItemTotal
-  budget <- getBudget
-  let remaining = budget - totalSpent
+  remaining <- runDB $ do 
+    totalSpent <- getLineItemTotal
+    budget <- getBudget
+    pure $ budget - totalSpent
   liftIO $ putStrLn $ "remaining budget is: " <> (show remaining)
 
-getTotalSpent :: AppT ()
-getTotalSpent = do
+showTotalSpent :: AppT ()
+showTotalSpent = do
   total <- runDB $ getLineItemTotal @Int
   liftIO $ putStrLn $ "total spent so far is: " <> show total 
 
@@ -149,7 +153,7 @@ interact = do
     case result of
       Right (CommandC name amount) -> addItem name amount
       Right CommandP -> showLineItems
-      Right CommandT -> getTotalSpent
+      Right CommandT -> showTotalSpent
       Right (CommandU amount) -> updateBudget amount
       Right CommandS -> showBudget
       Right CommandR -> showRemainingBudget
