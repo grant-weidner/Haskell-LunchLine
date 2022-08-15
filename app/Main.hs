@@ -57,16 +57,6 @@ getLineItemTotal = selectSum $ do
  where
   selectSum = fmap (maybe 0 (fromMaybe 0 . unValue)) . selectOne
 
--- getLineItemTotalLastDay :: (Num a, MonadIO m, PersistField a) => SqlPersistT m a
--- getLineItemTotalLastDay = select $ do
---   lineItems <- from $ table @LineItem
---     where_ $
---       lineItems ^. LineItemCreated <. val time24HoursAgo
---   pure $ sum_ $ lineItems ^. LineItemAmount
---  where
---   time24HoursAgo = liftIO $ fmap (addUTCTime (-nominalDay)) getCurrentTime
---   selectSum = fmap (maybe 0 (fromMaybe 0 . unValue)) . selectOne
-
 getLineItemTotalSince:: MonadIO m => UTCTime -> SqlPersistT m [Entity LineItem]
 getLineItemTotalSince t = 
   select $ do
@@ -96,16 +86,19 @@ getLineItems = select $ from $ table @LineItem
 
 getLineItemNames :: AppT [String]
 getLineItemNames = do
-  items <- runDB $ do getLineItems
+  items <- runDB getLineItems
   pure $ fmap (lineItemName . entityVal) items
 
 getLineItemsInShowFormat :: AppT [(String, Int)]
 getLineItemsInShowFormat = do 
-  items <- runDB $ getLineItems
-  pure $ fmap formatLineItem items where
-    formatLineItem s = (lineItemNameEV s, lineItemAmountEV s) where
-      lineItemNameEV = lineItemName . entityVal
-      lineItemAmountEV = lineItemAmount . entityVal
+  items <- runDB getLineItems
+  pure $ fmap (formatLineItem . entityVal) items 
+  where
+    formatLineItem s = (lineItemName s, lineItemAmount s) 
+
+-- add adt for command and parse into that
+-- move rundb into interact
+-- rewrite appt functions in sqlpersistT
 
 showLineItems :: AppT ()
 showLineItems = do
@@ -147,30 +140,21 @@ getTotalSpent = do
   total <- runDB $ getLineItemTotal @Int
   liftIO $ putStrLn $ "total spent so far is: " <> show total 
 
--- processUserInput :: String -> AppT ()
--- processUserInput input = case parseUserInput input of
---   "c" -> liftIO .  putStrLn $ "you said command c" 
---   "p" -> liftIO .  putStrLn $ "you said command p"
---   otherwise -> liftIO .  putStrLn $ "invalid command"
---   where parseUserInput input = splitOn " " input !! 0
-
 interact :: AppT ()
 interact = do
   liftIO . putStrLn $ "Hello,\nwaiting for input:" 
   forever $ do
     input <- liftIO $ getLine
-    let result = parse (parseC <|> parseP <|> parseT <|> parseU <|> parseS <|> parseR <|> parseD) input -- does this take you out of monadic context
+    let result = parse parser input
     case result of
-      -- Right ('c', Just name, Just amount) -> putStrLn "success! command c"
-      Right ('c', Just name, Just amount) -> addItem name amount
-      Right ('p', Nothing, Nothing) -> showLineItems
-      Right ('t', Nothing, Nothing) -> getTotalSpent
-      Right ('u', Nothing, Just amount) -> updateBudget amount
-      Right ('s', Nothing, Nothing) -> showBudget
-      Right ('r', Nothing, Nothing) -> showRemainingBudget
-      Right ('d', Nothing, Nothing) -> showLastDayStats
+      Right (CommandC name amount) -> addItem name amount
+      Right CommandP -> showLineItems
+      Right CommandT -> getTotalSpent
+      Right (CommandU amount) -> updateBudget amount
+      Right CommandS -> showBudget
+      Right CommandR -> showRemainingBudget
+      Right CommandD -> showLastDayStats
       Left _ -> liftIO $ putStrLn "whoops, error"
-      _ -> liftIO $ putStrLn "case not caught"
     liftIO $ putStrLn $ "waiting for input: "
     liftIO $ hFlush stdout
 
