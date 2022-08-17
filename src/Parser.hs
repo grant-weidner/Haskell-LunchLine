@@ -24,16 +24,15 @@ parseC = do
     digits <- read <$> Parsec.many1 Parsec.digit
     return $ CommandC letters digits
 
-parseSingleCharComand :: Char -> Parsec.Parsec String () Command
-parseSingleCharComand c = do
+parseSingleCharComand :: Char -> Command -> Parsec.Parsec String () Command
+parseSingleCharComand c m = do
     command <- Parsec.char c
     Parsec.spaces
-    case command of
-        'p' -> return CommandP
-        't' -> return CommandT
-        's' -> return CommandS
-        'd' -> return CommandD
-        'r' -> return CommandR
+    case command == c of
+        true -> return m
+        -- make this function take the command as an arg, to remove case statement
+        -- remove dollar signs
+        -- use let instead of pure, at least 3
 
 parseU :: Parsec.Parsec String () Command
 parseU = do
@@ -46,16 +45,16 @@ parseU = do
 parse rule text = Parsec.parse rule "(source)" text
 
 parser = (  parseC 
-        <|> parseSingleCharComand 'p'
-        <|> parseSingleCharComand 't' 
-        <|> parseU 
-        <|> parseSingleCharComand 's'
-        <|> parseSingleCharComand 'r' 
-        <|> parseSingleCharComand 'd'
+        <|> parseSingleCharComand 'p' CommandP
+        <|> parseSingleCharComand 't' CommandT
+        <|> parseU
+        <|> parseSingleCharComand 's' CommandS
+        <|> parseSingleCharComand 'r' CommandR
+        <|> parseSingleCharComand 'd' CommandD
          )
 
 error_example = do
-    let result = parse (parseC <|> parseSingleCharComand 'p') "p 21313 " 
+    let result = parse (parseC <|> parseSingleCharComand 'p' CommandP) "p 21313 " 
     case result of
         Right _ -> putStrLn "success!"
         Left _ -> putStrLn "whoops, error"

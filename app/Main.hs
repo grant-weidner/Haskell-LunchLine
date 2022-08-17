@@ -71,8 +71,8 @@ showLastDayStats :: AppT ()
 showLastDayStats = do 
   time24HoursAgo <- liftIO $ fmap (addUTCTime (-nominalDay)) getCurrentTime
   lastDayItems <- runDB $ getLineItemTotalSince time24HoursAgo 
-  numberLastDayItems <- pure $ length lastDayItems
-  totalSpentLastDay <- pure $ sum $ fmap (lineItemAmount . entityVal) lastDayItems
+  let numberLastDayItems = length lastDayItems
+  let totalSpentLastDay = sum $ fmap (lineItemAmount . entityVal) lastDayItems
   liftIO $ do 
     putStrLn $ "Last Day Stats:"
     putStrLn $ "  total spent in the last day: " <> show totalSpentLastDay
@@ -96,7 +96,7 @@ getLineItemsInShowFormat items =
 showLineItems :: AppT ()
 showLineItems = do
   items <- runDB getLineItems
-  itemsShowFormat <- pure $ getLineItemsInShowFormat (fmap entityVal items)
+  let itemsShowFormat = getLineItemsInShowFormat (fmap entityVal items) -- could use let
   liftIO . putStrLn $ intercalate "\n" (fmap show itemsShowFormat)
 
 addItem' :: MonadIO m => String -> Int -> UTCTime -> SqlPersistT m () -- changed to SqlPersistT
@@ -166,8 +166,8 @@ runApp = do
   addItem "Pizza" 11
   addItem "Burger" 12
   runDB $ insert_ $ Budget 100
-  total <- runDB $ getLineItemTotal
-  names <- runDB $ getLineItems
+  total <- runDB getLineItemTotal
+  names <- runDB getLineItems
   liftIO . putStrLn $ intercalate " " $ fmap (lineItemName . entityVal) names
   let remainingBudget = weeklyBudget - total
   liftIO .  putStrLn $ "Remaining Budget: " <> show remainingBudget
