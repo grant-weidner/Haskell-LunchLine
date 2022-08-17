@@ -28,18 +28,13 @@ parseSingleCharComand :: Char -> Command -> Parsec.Parsec String () Command
 parseSingleCharComand c m = do
     command <- Parsec.char c
     Parsec.spaces
-    case command == c of
-        true -> return m
-        -- make this function take the command as an arg, to remove case statement
-        -- remove dollar signs
-        -- use let instead of pure, at least 3
+    pure m
 
 parseU :: Parsec.Parsec String () Command
 parseU = do
     command <- Parsec.char 'u'
     Parsec.spaces
     digits <- read <$> Parsec.many1 Parsec.digit
-    return (command, Just digits)
     return $ CommandU digits
     
 parse rule text = Parsec.parse rule "(source)" text

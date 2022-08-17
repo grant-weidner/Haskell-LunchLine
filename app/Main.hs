@@ -97,7 +97,7 @@ showLineItems :: AppT ()
 showLineItems = do
   items <- runDB getLineItems
   let itemsShowFormat = getLineItemsInShowFormat (fmap entityVal items) -- could use let
-  liftIO . putStrLn $ intercalate "\n" (fmap show itemsShowFormat)
+  liftIO . putStrLn $ intercalate "\n" (map show itemsShowFormat)
 
 addItem' :: MonadIO m => String -> Int -> UTCTime -> SqlPersistT m () -- changed to SqlPersistT
 addItem' name amount time =  
@@ -146,7 +146,7 @@ interact :: AppT ()
 interact = do
   liftIO . putStrLn $ "Hello,\nwaiting for input:" 
   forever $ do
-    input <- liftIO $ getLine
+    input <- liftIO getLine
     let result = parse parser input
     case result of
       Right command ->  case command of 
